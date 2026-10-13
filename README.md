@@ -81,7 +81,7 @@ The direction and magnitude line up with published research: a Moroccan ENSEM Ca
 ```bash
 npm install
 npm run dev      # http://localhost:3000  (landing at /, twin at /demo)
-npm test         # vitest — 44 tests, all deterministic (seeded)
+npm test         # vitest — 69 tests, all deterministic (seeded)
 npm run build    # production build
 ```
 
@@ -95,6 +95,13 @@ import {
   saveScenario, loadSavedScenarios,      // named scenarios (localStorage)
   buildSeriesCsv, buildExportJson,       // CSV / JSON export
   cloneDisruptions,                      // disruption bundles
+  // --- research-grade output analysis (see "Simulation science" below) ---
+  welchForParams, batchMeans, pairedComparison,  // Welch, batch means, CRN
+  verifyRun,                             // V&V: Little's Law, conservation, utilization
+  calibrate,                             // fit-to-data (random search + warning)
+  erlangGateCheck,                       // M/M/c analytical cross-check
+  runFactorial, ofatSensitivity,         // DOE + OFAT tornado + interaction heatmap
+  confidenceInterval, tQuantile,         // Student-t statistics
 } from "./src/sim";
 
 // Monte Carlo: 30 replications, seeds 42..71
@@ -128,7 +135,14 @@ porttwin/
 │   │   ├── scenarios.ts      # crisis / TAS / TAS+night presets + control metadata
 │   │   ├── disruptions.ts    # crane breakdown, bunching, gate closure, weather
 │   │   ├── costs.ts          # $ cost model (demurrage, waiting, fuel, cranes, CO₂)
-│   │   ├── montecarlo.ts     # N-replication runs + 95% CI summaries
+│   │   ├── montecarlo.ts     # N-replication runs + 95% CI summaries (Student-t)
+│   │   ├── stats.ts          # t-distribution (exact), CIs, floored-service expectations
+│   │   ├── outputAnalysis.ts # Welch warm-up, batch means, CRN paired comparison
+│   │   ├── vv.ts             # verification: Little's Law, conservation, utilization
+│   │   ├── calibration.ts    # fit-to-data random search + identification warning
+│   │   ├── erlang.ts         # M/M/c Erlang-C analytical cross-check
+│   │   ├── sensitivity.ts    # OFAT tornado + 2-factor interaction heatmap
+│   │   ├── doe.ts            # full 2^k factorial experiments (Montgomery)
 │   │   ├── storage.ts        # saved scenarios (localStorage, injectable backend)
 │   │   ├── export.ts         # CSV / JSON export builders
 │   │   └── index.ts
@@ -144,10 +158,14 @@ porttwin/
 │       ├── CostPanel.tsx     # cost breakdown + editable rates
 │       ├── MonteCarloPanel.tsx   # replications, progress, CI table + bands
 │       ├── SavedScenariosPanel.tsx  # save/load named scenarios
-│       └── ExportBar.tsx     # CSV / JSON downloads
+│       ├── ExportBar.tsx     # CSV / JSON downloads
+│       └── ResearchPanel.tsx # 6 research tabs: output analysis, sensitivity,
+│                              # V&V, calibration, Erlang-C, DOE
 ├── tests/
 │   ├── sim.test.ts         # 17 vitest tests (determinism, KPIs, scenario deltas)
-│   └── upgrade.test.ts     # 27 tests (Monte Carlo, disruptions, costs, storage, export)
+│   ├── upgrade.test.ts     # 27 tests (Monte Carlo, disruptions, costs, storage, export)
+│   └── research.test.ts    # 25 tests (t-stats, Welch, batch means, CRN, V&V,
+│                              # Erlang-C textbook values, calibration, DOE, OFAT)
 └── README.md
 ```
 
@@ -162,13 +180,36 @@ For a port authority evaluating a truck appointment system:
 
 *Illustrative figures from the stylized model — plug in your tariffs for exact numbers.*
 
+## Simulation science — methods
+
+The Research panel applies textbook simulation methodology. Every method states its assumptions in-app; nothing is presented as more rigorous than it is.
+
+- **Confidence intervals use the Student-t distribution** (df = n − 1), not the 1.96 normal factor — the normal factor is only the df → ∞ limit and understates uncertainty for modest replication counts (Law & Kelton, Ch. 9).
+- **Welch's moving-average procedure** visualizes the initial transient across replications. The twin is a *terminating* simulation (one 24 h day, starts empty), so the ramp-up is real behaviour and is reported, **not deleted**. Deletion would be appropriate for a steady-state study.
+- **Batch means** builds a CI from a single run's time series. It assumes approximate stationarity; this day is strongly non-stationary (morning peak), so the batch-means CI is indicative only — replication CIs remain primary.
+- **Common random numbers (CRN)**: two scenarios run with the same seed stream; the comparison uses a paired-t CI on per-replication differences. The panel also shows the independent-streams CI so the variance reduction is visible, not assumed. CRN helps less when a structural change (e.g. TAS on/off) reshuffles the random stream.
+- **Verification & validation**: the engine proves its own bookkeeping — conservation of flow (exact integer equality), Little's Law L = λ·W (using truncated sojourns, which is what makes the identity hold on a terminating run), and per-stage utilization identities using the *exact floored* service-time expectations (the engine floors service times, which raises the exponential berth mean by ~7%; ignoring the floor makes the check fail systematically — that failure is how the floor was caught). These verify internal consistency only, not validity against the real port.
+- **Calibration** ("fit to data") runs a random search minimizing weighted squared relative error against pasted observed KPIs, and always shows the identification warning: fitting 3 parameters to 3 KPIs is identification-thin — a good fit proves the model *can* reproduce those KPIs, not that the parameters are the true ones.
+- **Erlang-C cross-check**: an analytical M/M/c computation for the gate, shown next to the simulation. M/M/c assumes Poisson arrivals, exponential service, and steady state — all violated here on purpose — so divergence is expected and explained. When ρ ≥ 1 the analytical model has no steady state and the panel says so instead of printing a number.
+- **Design of experiments**: full 2^k factorial (k = 2 or 3) with Yates-contrast effect estimates and an interaction plot. OFAT tornado + 2-factor heatmap cover screening; DOE covers interactions.
+
+### References
+
+- Law, A. M., & Kelton, W. D. (2015). *Simulation Modeling and Analysis*, 5th ed. McGraw-Hill.
+- Banks, J., Carson, J. S., Nelson, B. L., & Nicol, D. M. (2010). *Discrete-Event System Simulation*, 5th ed. Pearson.
+- Gross, D., Shortle, J. F., Thompson, J. M., & Harris, C. M. (2018). *Fundamentals of Queueing Theory*, 5th ed. Wiley.
+- Montgomery, D. C. (2017). *Design and Analysis of Experiments*, 9th ed. Wiley.
+- Welch, P. D. (1983). The statistical analysis of simulation results. In S. S. Lavenberg (Ed.), *The Computer Performance Modeling Handbook*. Academic Press.
+
 ## Honest limitations
 
 - **Stylized, not calibrated.** Parameters are chosen to reproduce the crisis narrative (throughput collapse, 12h waits); the model is **not fitted to live port data**. The −54% queue reduction is the model's output; the −62% figure is from the ENSEM study on real data.
 - **Landside only.** Vessel scheduling, rail, and labor shifts are out of scope; the berth stage is a simplified loading server.
 - **One representative day.** The default horizon is 24h; multi-day dynamics (weekend effects, vessel bunching) are not modeled. *Vessel bunching* in the disruption lab is a truck-arrival burst, not a vessel schedule.
 - **Cost rates are illustrative.** Dollar figures use plausible default rates (see `DEFAULT_COST_RATES`), not official port tariffs. "Demurrage" is a truck-hour proxy — the twin is landside and does not simulate vessels, so vessel demurrage per se is out of scope. Plug in real rates before quoting numbers.
-- **Monte Carlo CIs are normal approximations** (mean ± 1.96·σ/√n). With few replications (<10) treat bands as rough; the panel defaults to 30.
+- **Monte Carlo CIs are Student-t** (mean ± t(0.975, n−1)·s/√n). With few replications the bands are honestly wide — that is the point.
+- **Calibration is identification-thin.** Fitting 3 parameters to 3 KPIs cannot identify the true parameters; a low residual only shows the model can reproduce those KPIs. Real calibration needs time-series data, more KPIs than parameters, and hold-out validation.
+- **Welch warm-up is diagnostic only.** The model is a terminating 24 h simulation; no warm-up deletion is applied, because the ramp-up is real behaviour.
 - **Disruptions are stylized.** A crane breakdown removes one crane for a window; it does not model repair logistics, spare parts, or cascading maintenance. Weather scales yard handling times only — it does not affect gates or berths.
 - **No live data feeds.** A production twin would ingest gate logs, GPS, and TOS data — the engine is structured to accept that (see `Snapshot`/`SimParams`), but no connectors are built.
 
