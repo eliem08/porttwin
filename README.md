@@ -27,6 +27,11 @@ A **discrete-event simulation** of the port's landside chain, wrapped in a polis
 - **Simulation engine** (`src/sim/`) — decoupled, importable TypeScript; zero UI dependencies. Seeded and fully deterministic.
 - **Scenario lab** (`/demo`) — toggles and sliders for every lever: appointment system on/off, appointment share, no-show rate, active gates (1–4), gate hours incl. night gate, customs speed, yard cranes, berths, grain share/priority.
 - **KPI dashboard** — throughput (TEU/day), average truck wait, max queue length, gate utilization, CO₂ from idling; side-by-side comparison against the crisis baseline with charts.
+- **Monte Carlo** — re-run any scenario N times (default 30) with different seeds; every KPI gets a mean and a 95% confidence interval so a board sees uncertainty, not one lucky draw.
+- **Disruption lab** — toggle crane breakdown, vessel bunching, gate closure, and weather slowdown, alone or combined, and watch KPIs and costs move.
+- **Cost model** — dollar estimates per scenario (demurrage/detention, truck waiting, fuel/idling, crane-hours, carbon) with editable rates and deltas vs the crisis baseline.
+- **Saved scenarios** — name and store full setups (every slider, toggle, and disruption) in the browser; reload them anytime.
+- **Export** — download the time series as CSV, the KPI comparison as CSV, or the full reproducible bundle (params + KPIs + costs + Monte Carlo) as JSON.
 - **Guided demo** — a 3-step narrative (crisis → Rotterdam-style TAS → TAS + night gate) for first-time viewers.
 - **Animated port schematic** — the twin visualized live: gates, queues, yard cranes, berths.
 
@@ -63,6 +68,8 @@ The direction and magnitude line up with published research: a Moroccan ENSEM Ca
 │  │  src/sim — decoupled simulation engine (no UI deps)       │  │
 │  │  rng.ts (mulberry32) → types.ts → engine.ts (event heap) │  │
 │  │  → scenarios.ts (presets + param metadata)               │  │
+│  │  → disruptions.ts → costs.ts → montecarlo.ts             │  │
+│  │  → storage.ts (saved scenarios) → export.ts (CSV/JSON)   │  │
 │  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -74,8 +81,29 @@ The direction and magnitude line up with published research: a Moroccan ENSEM Ca
 ```bash
 npm install
 npm run dev      # http://localhost:3000  (landing at /, twin at /demo)
-npm test         # vitest — 17 tests, all deterministic (seeded)
+npm test         # vitest — 44 tests, all deterministic (seeded)
 npm run build    # production build
+```
+
+### New in this version
+
+```ts
+import {
+  runSimulation, presetParams,           // base engine
+  runMonteCarlo, runMonteCarloAsync,     // N replications + 95% CI
+  computeCosts, DEFAULT_COST_RATES,      // $ estimates per scenario
+  saveScenario, loadSavedScenarios,      // named scenarios (localStorage)
+  buildSeriesCsv, buildExportJson,       // CSV / JSON export
+  cloneDisruptions,                      // disruption bundles
+} from "./src/sim";
+
+// Monte Carlo: 30 replications, seeds 42..71
+const mc = runMonteCarlo(presetParams("tas"), 30, 42);
+console.log(mc.summaries.throughputTeuPerDay); // { mean, std, ciLow, ciHigh, min, max }
+
+// Costs: demurrage, waiting, fuel, crane-hours, carbon
+const result = runSimulation(presetParams("tas"));
+console.log(computeCosts(result.kpis, result.waitSamplesMin).total); // $/day
 ```
 
 ### Use the engine standalone
@@ -98,6 +126,11 @@ porttwin/
 │   │   ├── types.ts          # SimParams, Truck, Snapshot, Kpis
 │   │   ├── engine.ts         # discrete-event core (binary-heap event queue)
 │   │   ├── scenarios.ts      # crisis / TAS / TAS+night presets + control metadata
+│   │   ├── disruptions.ts    # crane breakdown, bunching, gate closure, weather
+│   │   ├── costs.ts          # $ cost model (demurrage, waiting, fuel, cranes, CO₂)
+│   │   ├── montecarlo.ts     # N-replication runs + 95% CI summaries
+│   │   ├── storage.ts        # saved scenarios (localStorage, injectable backend)
+│   │   ├── export.ts         # CSV / JSON export builders
 │   │   └── index.ts
 │   ├── app/
 │   │   ├── page.tsx          # marketing landing page
@@ -106,8 +139,15 @@ porttwin/
 │   │   └── globals.css       # "harbor at night" design system
 │   └── components/
 │       ├── PortMap.tsx       # animated SVG port schematic + playback
-│       └── ControlPanel.tsx  # PARAM_META-driven scenario controls
-├── tests/sim.test.ts         # 17 vitest tests (determinism, KPIs, scenario deltas)
+│       ├── ControlPanel.tsx  # PARAM_META-driven scenario controls
+│       ├── DisruptionsPanel.tsx  # 4 toggleable, combinable disruptions
+│       ├── CostPanel.tsx     # cost breakdown + editable rates
+│       ├── MonteCarloPanel.tsx   # replications, progress, CI table + bands
+│       ├── SavedScenariosPanel.tsx  # save/load named scenarios
+│       └── ExportBar.tsx     # CSV / JSON downloads
+├── tests/
+│   ├── sim.test.ts         # 17 vitest tests (determinism, KPIs, scenario deltas)
+│   └── upgrade.test.ts     # 27 tests (Monte Carlo, disruptions, costs, storage, export)
 └── README.md
 ```
 
@@ -126,15 +166,18 @@ For a port authority evaluating a truck appointment system:
 
 - **Stylized, not calibrated.** Parameters are chosen to reproduce the crisis narrative (throughput collapse, 12h waits); the model is **not fitted to live port data**. The −54% queue reduction is the model's output; the −62% figure is from the ENSEM study on real data.
 - **Landside only.** Vessel scheduling, rail, and labor shifts are out of scope; the berth stage is a simplified loading server.
-- **One representative day.** The default horizon is 24h; multi-day dynamics (weekend effects, vessel bunching) are not modeled.
+- **One representative day.** The default horizon is 24h; multi-day dynamics (weekend effects, vessel bunching) are not modeled. *Vessel bunching* in the disruption lab is a truck-arrival burst, not a vessel schedule.
+- **Cost rates are illustrative.** Dollar figures use plausible default rates (see `DEFAULT_COST_RATES`), not official port tariffs. "Demurrage" is a truck-hour proxy — the twin is landside and does not simulate vessels, so vessel demurrage per se is out of scope. Plug in real rates before quoting numbers.
+- **Monte Carlo CIs are normal approximations** (mean ± 1.96·σ/√n). With few replications (<10) treat bands as rough; the panel defaults to 30.
+- **Disruptions are stylized.** A crane breakdown removes one crane for a window; it does not model repair logistics, spare parts, or cascading maintenance. Weather scales yard handling times only — it does not affect gates or berths.
 - **No live data feeds.** A production twin would ingest gate logs, GPS, and TOS data — the engine is structured to accept that (see `Snapshot`/`SimParams`), but no connectors are built.
 
 ## Roadmap
 
 - Live data ingestion (gate logs, truck GPS) to calibrate arrival/service distributions
 - Vessel schedule integration and berth planning module
-- Cost module with configurable tariffs for board-ready ROI sheets
-- Multi-day horizons and what-if comparison export (PDF)
+- Multi-day horizons and PDF board-report export
+- Multi-scenario comparison view (run 2–3 scenarios side by side)
 
 ## License
 

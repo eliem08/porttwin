@@ -15,10 +15,30 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { runSimulation, presetParams, PRESETS, DEFAULT_PARAMS } from "@/sim";
-import type { SimParams, SimResult } from "@/sim";
+import {
+  runSimulation,
+  presetParams,
+  PRESETS,
+  DEFAULT_PARAMS,
+  DEFAULT_COST_RATES,
+  computeCostsForResult,
+  describeDisruptions,
+  anyDisruptionActive,
+} from "@/sim";
+import type {
+  CostRates,
+  Disruptions,
+  MonteCarloResult,
+  SimParams,
+  SimResult,
+} from "@/sim";
 import PortMap from "@/components/PortMap";
 import ControlPanel from "@/components/ControlPanel";
+import DisruptionsPanel from "@/components/DisruptionsPanel";
+import CostPanel from "@/components/CostPanel";
+import MonteCarloPanel from "@/components/MonteCarloPanel";
+import SavedScenariosPanel from "@/components/SavedScenariosPanel";
+import ExportBar from "@/components/ExportBar";
 
 const SIGNAL = "var(--color-signal)";
 const CORAL = "var(--color-coral)";
@@ -119,9 +139,24 @@ export default function DemoPage() {
   const [computing, setComputing] = useState(false);
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [tourFreePlay, setTourFreePlay] = useState(false);
+  const [costRates, setCostRates] = useState<CostRates>(DEFAULT_COST_RATES);
+  const [mcResult, setMcResult] = useState<MonteCarloResult | null>(null);
   const firstRun = useRef(true);
 
   const baseline = useMemo(() => runSimulation(presetParams("crisis")), []);
+  const baselineCosts = useMemo(
+    () => computeCostsForResult(baseline, costRates),
+    [baseline, costRates]
+  );
+  const currentCosts = useMemo(
+    () => computeCostsForResult(result, costRates),
+    [result, costRates]
+  );
+  const activeDisruptions = useMemo(
+    () => describeDisruptions(params.disruptions),
+    [params.disruptions]
+  );
+  const disruptionsOn = anyDisruptionActive(params.disruptions);
 
   useEffect(() => {
     if (firstRun.current) {
@@ -151,6 +186,20 @@ export default function DemoPage() {
     setParams((prev) => ({ ...prev, ...patch }));
     setActivePreset("custom");
   }, []);
+
+  const onDisruptionsChange = useCallback((disruptions: Disruptions) => {
+    setParams((prev) => ({ ...prev, disruptions }));
+    setActivePreset("custom");
+  }, []);
+
+  const onLoadSaved = useCallback(
+    (loadedParams: SimParams, loadedDisruptions: Disruptions) => {
+      setParams({ ...loadedParams, disruptions: loadedDisruptions });
+      setActivePreset("custom");
+      setError(null);
+    },
+    []
+  );
 
   const onReset = useCallback(() => {
     const target = activePreset === "custom" ? "crisis" : activePreset;
@@ -515,8 +564,51 @@ export default function DemoPage() {
                 <p className="mt-2 text-[11px] text-mist">
                   Deltas compare against the crisis baseline. Seed {params.seed} · deterministic
                   engine.
+                  {disruptionsOn && (
+                    <>
+                      {" "}
+                      Active disruptions: {activeDisruptions.join(" · ")}.
+                    </>
+                  )}
                 </p>
               </section>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <CostPanel
+                  current={currentCosts}
+                  baseline={baselineCosts}
+                  rates={costRates}
+                  onRatesChange={setCostRates}
+                />
+                <DisruptionsPanel
+                  disruptions={params.disruptions}
+                  onChange={onDisruptionsChange}
+                />
+              </div>
+
+              <MonteCarloPanel
+                params={params}
+                singleRun={result.kpis}
+                onResult={setMcResult}
+              />
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <SavedScenariosPanel
+                  params={params}
+                  disruptions={params.disruptions}
+                  onLoad={onLoadSaved}
+                />
+                <ExportBar
+                  current={result}
+                  baseline={baseline}
+                  scenarioLabel={
+                    activePreset === "custom" ? "custom" : activePreset
+                  }
+                  rates={costRates}
+                  costs={currentCosts}
+                  monteCarlo={mcResult}
+                />
+              </div>
 
               <section className="panel overflow-hidden">
                 <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
