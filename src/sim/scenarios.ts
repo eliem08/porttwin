@@ -13,6 +13,7 @@
  */
 
 import type { SimParams } from "./types";
+import { cloneDisruptions, DEFAULT_DISRUPTIONS } from "./disruptions";
 
 export const DEFAULT_PARAMS: SimParams = {
   seed: 42,
@@ -43,6 +44,8 @@ export const DEFAULT_PARAMS: SimParams = {
 
   teuPerTruck: [1, 2],
   co2KgPerIdleHour: 2.68,
+
+  disruptions: DEFAULT_DISRUPTIONS,
 };
 
 export interface Preset {
@@ -127,14 +130,19 @@ export interface ParamMeta {
 export const PARAM_META: ParamMeta[] = [
   { key: "trucksPerDay", label: "Truck demand", min: 800, max: 4000, step: 50, unit: "/day", group: "Demand", hint: "Attempted arrivals per day" },
   { key: "morningPeakFactor", label: "Morning peak", min: 1, max: 4, step: 0.1, unit: "×", group: "Demand", hint: "Arrival surge 6–10 AM" },
+  { key: "nightFactor", label: "Night arrivals", min: 0, max: 1, step: 0.05, unit: "×", group: "Demand", hint: "Arrival rate 0–5 AM vs daytime" },
   { key: "appointmentSystem", label: "Appointment system", min: 0, max: 1, step: 1, unit: "", group: "Appointment system", hint: "TAS on/off" },
   { key: "appointmentShare", label: "Appointment share", min: 0, max: 1, step: 0.05, unit: "%", group: "Appointment system", hint: "Trucks holding a slot" },
   { key: "noShowRate", label: "No-show rate", min: 0, max: 0.3, step: 0.01, unit: "%", group: "Appointment system", hint: "Slots wasted by no-shows" },
   { key: "numGates", label: "Active gates", min: 1, max: 4, step: 1, unit: "", group: "Gates", hint: "Casablanca has 3 today" },
+  { key: "gateOpenHour", label: "Gate opening", min: 0, max: 8, step: 1, unit: ":00", group: "Gates", hint: "First hour gates serve trucks" },
   { key: "gateCloseHour", label: "Gate closing", min: 18, max: 24, step: 1, unit: ":00", group: "Gates", hint: "24 = night gate open" },
   { key: "gateServiceMeanMin", label: "Gate service time", min: 1, max: 8, step: 0.1, unit: " min", group: "Gates", hint: "Customs speed per truck" },
+  { key: "gateServiceSigma", label: "Gate service variability", min: 0.1, max: 1.2, step: 0.05, unit: "σ", group: "Gates", hint: "Spread of customs check times" },
   { key: "yardCranes", label: "Yard cranes", min: 2, max: 12, step: 1, unit: "", group: "Yard & berth", hint: "Parallel handling capacity" },
+  { key: "yardHandleMeanMin", label: "Yard handling time", min: 2, max: 15, step: 0.5, unit: " min", group: "Yard & berth", hint: "Mean time per truck in the yard" },
   { key: "numBerths", label: "Berths", min: 1, max: 5, step: 1, unit: "", group: "Yard & berth", hint: "Loading berths" },
+  { key: "berthLoadMeanMin", label: "Berth loading time", min: 1, max: 8, step: 0.5, unit: " min", group: "Yard & berth", hint: "Mean time per truck at berth" },
   { key: "grainShare", label: "Grain share", min: 0, max: 0.6, step: 0.05, unit: "%", group: "Cargo", hint: "Record grain imports" },
   { key: "grainPriority", label: "Grain priority", min: 0, max: 1, step: 1, unit: "", group: "Cargo", hint: "Grain jumps yard queue" },
 ];
@@ -142,5 +150,12 @@ export const PARAM_META: ParamMeta[] = [
 export function presetParams(id: string): SimParams {
   const preset = PRESETS.find((p) => p.id === id);
   if (!preset) throw new Error(`Unknown preset: ${id}`);
-  return { ...DEFAULT_PARAMS, ...preset.params };
+  return {
+    ...DEFAULT_PARAMS,
+    ...preset.params,
+    // Clone: presets must never share the mutable DEFAULT_DISRUPTIONS object.
+    disruptions: cloneDisruptions(
+      (preset.params as Partial<SimParams>).disruptions ?? DEFAULT_DISRUPTIONS
+    ),
+  };
 }

@@ -34,6 +34,8 @@ function formatValue(value: number, unit: string): string {
       return `${value.toFixed(1)} min`;
     case "×":
       return `${value.toFixed(1)}×`;
+    case "σ":
+      return `${value.toFixed(2)}σ`;
     default:
       return `${Math.round(value)}`;
   }

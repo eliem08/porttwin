@@ -12,6 +12,8 @@
  * peaky arrival profile and wait in a lower-priority lane.
  */
 
+import type { Disruptions } from "./disruptions";
+
 /** Tunable parameters of one simulation run. All times in minutes unless noted. */
 export interface SimParams {
   /** Integer seed for the deterministic PRNG. */
@@ -64,6 +66,12 @@ export interface SimParams {
   teuPerTruck: [number, number];
   /** kg of CO2 emitted per hour a truck idles in the gate queue. */
   co2KgPerIdleHour: number;
+
+  /**
+   * Disruption bundle (crane breakdown, vessel bunching, gate closure,
+   * weather slowdown). All off by default; see disruptions.ts.
+   */
+  disruptions: Disruptions;
 }
 
 /** A truck moving through the simulated port. */
@@ -117,6 +125,14 @@ export interface Kpis {
   completedTrucks: number;
   /** Mean end-to-end time (arrival → berth completion), minutes. */
   avgSystemMin: number;
+  /** Total gate-wait truck-hours (served trucks), for cost modelling. */
+  totalWaitHours: number;
+  /** Total end-to-end truck-hours (completed trucks). */
+  totalSystemHours: number;
+  /** Total busy crane-hours at the yard. */
+  yardCraneHours: number;
+  /** Total busy crane-hours at the berths. */
+  berthCraneHours: number;
 }
 
 /** Full result of one simulation run. */
@@ -125,6 +141,20 @@ export interface SimResult {
   kpis: Kpis;
   /** Snapshots sampled every `snapshotEveryMin` (see engine). */
   series: Snapshot[];
+  /**
+   * Gate wait per served truck, in minutes. Used by the cost module to
+   * price demurrage/detention beyond a free-time threshold.
+   */
+  waitSamplesMin: number[];
+}
+
+/** Options for `runSimulation`. */
+export interface RunOptions {
+  /**
+   * When false, skip collecting the snapshot series and wait samples
+   * (used by Monte Carlo, which only needs KPIs). Default true.
+   */
+  includeSeries?: boolean;
 }
 
 /** Optional callback invoked with each snapshot as the sim runs. */

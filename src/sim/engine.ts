@@ -19,7 +19,14 @@ import {
   lognormal,
   type Rng,
 } from "./rng";
+import {
+  craneDownAt,
+  gateClosedAt,
+  yardProductivityAt,
+  type Disruptions,
+} from "./disruptions";
 import type {
+  RunOptions,
   SimParams,
   SimResult,
   Snapshot,
@@ -153,6 +160,23 @@ export function generateTrucks(p: SimParams, rng: Rng): Truck[] {
     generateWalkins(trucks, expectedTotal, horizonMin, p, rng, () => id++);
   }
 
+  // Disruption: vessel bunching — a burst of extra trucks inside one tide
+  // window, as if 2–3 vessels arrived on the same tide.
+  const bunch = p.disruptions?.vesselBunching;
+  if (bunch?.enabled && bunch.extraTrucks > 0) {
+    const winStart = bunch.windowStartHour * 60;
+    const winEnd = Math.min(
+      horizonMin,
+      winStart + Math.max(0, bunch.windowHours) * 60
+    );
+    for (let i = 0; i < bunch.extraTrucks; i++) {
+      const arrival = uniform(rng, winStart, Math.max(winStart + 1, winEnd));
+      if (arrival <= horizonMin) {
+        trucks.push(makeTruck(id++, arrival, false, null, p, rng));
+      }
+    }
+  }
+
   trucks.sort((a, b) => a.arrivalTime - b.arrivalTime || a.id - b.id);
   return trucks;
 }
@@ -226,9 +250,12 @@ function gatesOpenAt(tMin: number, p: SimParams): boolean {
 
 export function runSimulation(
   params: SimParams,
-  onSnapshot?: SnapshotCallback
+  onSnapshot?: SnapshotCallback,
+  options?: RunOptions
 ): SimResult {
   const p = { ...params };
+  const disruptions: Disruptions | undefined = p.disruptions;
+  const collectSeries = options?.includeSeries !== false;
   const horizonMin = p.simHours * 60;
   const rng = mulberry32(p.seed);
   const trucks = generateTrucks(p, rng);
@@ -257,9 +284,11 @@ export function runSimulation(
   let gateBusyMin = 0; // accumulated across gates while open
   let yardBusyMin = 0;
   let berthBusyMin = 0;
+  const waitSamplesMin: number[] = [];
 
   const series: Snapshot[] = [];
   const emit = (t: number) => {
+    if (!collectSeries) return;
     const s: Snapshot = {
       t,
       gateQueue: apptQueue.length + walkQueue.length,
@@ -283,6 +312,8 @@ export function runSimulation(
     if (!gatesOpenAt(t, p)) return;
     for (let g = 0; g < p.numGates; g++) {
       if (gateBusyUntil[g] > t) continue;
+      // Disruption: this gate lane is closed for a shift.
+      if (gateClosedAt(disruptions, g, t)) continue;
       const truck = apptQueue.length > 0 ? apptQueue.shift()! : walkQueue.shift();
       if (!truck) break;
       const wait = t - truck.arrivalTime;
@@ -290,6 +321,7 @@ export function runSimulation(
       truck.gateWaitMin = wait;
       waitSum += wait;
       waitedCount++;
+      waitSamplesMin.push(wait);
       idleCo2Kg += (wait / 60) * p.co2KgPerIdleHour;
       const svc = Math.max(0.5, lognormal(rng, p.gateServiceMeanMin, p.gateServiceSigma));
       gateBusyUntil[g] = t + svc;
@@ -299,8 +331,12 @@ export function runSimulation(
   }
 
   function tryStartYard(t: number): void {
+    // Disruption: weather slows yard handling (longer service times).
+    const productivity = yardProductivityAt(disruptions, t);
     for (let c = 0; c < p.yardCranes; c++) {
       if (yardBusyUntil[c] > t) continue;
+      // Disruption: this crane is broken down.
+      if (craneDownAt(disruptions, c, t)) continue;
       if (yardQueue.length === 0) break;
       let idx = 0;
       if (p.grainPriority) {
@@ -308,7 +344,8 @@ export function runSimulation(
         if (idx === -1) idx = 0;
       }
       const truck = yardQueue.splice(idx, 1)[0];
-      const svc = Math.max(1, lognormal(rng, p.yardHandleMeanMin, 0.4));
+      const base = Math.max(1, lognormal(rng, p.yardHandleMeanMin, 0.4));
+      const svc = base / productivity;
       yardBusyUntil[c] = t + svc;
       yardBusyMin += svc;
       events.push(t + svc, "yardEnd", truck);
@@ -420,7 +457,11 @@ export function runSimulation(
     totalTrucks: trucks.length,
     completedTrucks,
     avgSystemMin: completedTrucks > 0 ? systemSum / completedTrucks : 0,
+    totalWaitHours: waitSum / 60,
+    totalSystemHours: systemSum / 60,
+    yardCraneHours: yardBusyMin / 60,
+    berthCraneHours: berthBusyMin / 60,
   };
 
-  return { params: p, kpis, series };
+  return { params: p, kpis, series, waitSamplesMin };
 }
