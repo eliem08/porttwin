@@ -39,6 +39,7 @@ import CostPanel from "@/components/CostPanel";
 import MonteCarloPanel from "@/components/MonteCarloPanel";
 import SavedScenariosPanel from "@/components/SavedScenariosPanel";
 import ExportBar from "@/components/ExportBar";
+import ResearchPanel from "@/components/ResearchPanel";
 
 const SIGNAL = "var(--color-signal)";
 const CORAL = "var(--color-coral)";
@@ -590,6 +591,15 @@ export default function DemoPage() {
                 params={params}
                 singleRun={result.kpis}
                 onResult={setMcResult}
+              />
+
+              <ResearchPanel
+                params={params}
+                result={result}
+                onApplyParams={(next) => {
+                  setParams(next);
+                  setActivePreset("custom");
+                }}
               />
 
               <div className="grid gap-4 xl:grid-cols-2">

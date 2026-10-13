@@ -300,8 +300,8 @@ export default function MonteCarloPanel({
 
           <p className="border-t border-white/10 pt-3 text-[11px] leading-snug text-mist">
             {result.replications} replications, seeds {result.baseSeed}–
-            {result.baseSeed + result.replications - 1}. CI = mean ± 1.96·σ/√n
-            (normal approximation). Wider bands mean the scenario is more
+            {result.baseSeed + result.replications - 1}. CI = mean ± t(0.975, n−1)·s/√n
+            (Student-t, Law &amp; Kelton Ch. 9). Wider bands mean the scenario is more
             luck-dependent.
           </p>
         </div>
