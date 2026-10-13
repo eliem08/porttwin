@@ -654,10 +654,47 @@ export default function Page() {
               ))}
             </ol>
 
+            <div className="mt-12">
+              <span className="chip">05 · Power tools</span>
+              <h3 className="font-display mt-4 text-2xl font-semibold tracking-tight text-ink">
+                Built for the board meeting, not just the demo.
+              </h3>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="panel p-5">
+                  <p className="font-display text-base font-semibold text-ink">Monte Carlo</p>
+                  <p className="mt-2 text-sm leading-relaxed text-mist">
+                    30 replications per scenario, with 95% confidence bands on every KPI —
+                    uncertainty, not one lucky draw.
+                  </p>
+                </div>
+                <div className="panel p-5">
+                  <p className="font-display text-base font-semibold text-ink">Disruptions</p>
+                  <p className="mt-2 text-sm leading-relaxed text-mist">
+                    Crane breakdown, vessel bunching, gate closure, weather slowdown —
+                    toggleable, combinable, costed.
+                  </p>
+                </div>
+                <div className="panel p-5">
+                  <p className="font-display text-base font-semibold text-ink">Cost model</p>
+                  <p className="mt-2 text-sm leading-relaxed text-mist">
+                    Demurrage, waiting, fuel, crane-hours, carbon — dollar deltas vs the
+                    crisis baseline, with editable rates.
+                  </p>
+                </div>
+                <div className="panel p-5">
+                  <p className="font-display text-base font-semibold text-ink">Save &amp; export</p>
+                  <p className="mt-2 text-sm leading-relaxed text-mist">
+                    Name and store scenarios in the browser; download CSV or a full
+                    reproducible JSON bundle.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="mt-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-3">
                 <span className="chip">Seeded &amp; deterministic — every run reproducible</span>
-                <span className="chip">Decoupled TypeScript engine, 17 automated tests</span>
+                <span className="chip">Decoupled TypeScript engine, 44 automated tests</span>
               </div>
               <Link href="/demo" className="btn-primary self-start lg:self-auto">
                 Run a scenario
