@@ -267,6 +267,8 @@ export function runSimulation(
   const walkQueue: Truck[] = [];
   const yardQueue: Truck[] = [];
   const berthQueue: Truck[] = [];
+  /** Trucks currently in service (for the truncated-sojourn V&V total). */
+  const inService = new Set<Truck>();
 
   // Server busy-until times
   const gateBusyUntil: number[] = new Array(p.numGates).fill(0);
@@ -284,10 +286,29 @@ export function runSimulation(
   let gateBusyMin = 0; // accumulated across gates while open
   let yardBusyMin = 0;
   let berthBusyMin = 0;
+  // V&V counters (exact bookkeeping from the event loop).
+  let gateStarts = 0;
+  let yardStarts = 0;
+  let berthStarts = 0;
+  // Rectangle-rule area of (trucks in system) over time, for Little's Law.
+  let systemAreaMin = 0;
+  let lastAreaT = 0;
   const waitSamplesMin: number[] = [];
 
   const series: Snapshot[] = [];
   const emit = (t: number) => {
+    const inSystem =
+      apptQueue.length +
+      walkQueue.length +
+      yardQueue.length +
+      berthQueue.length +
+      gateBusyUntil.filter((b) => b > t).length +
+      yardBusyUntil.filter((b) => b > t).length +
+      berthBusyUntil.filter((b) => b > t).length;
+    // Area accumulates even when series collection is off, so the
+    // Little's Law check works for Monte Carlo runs too.
+    systemAreaMin += inSystem * Math.max(0, t - lastAreaT);
+    lastAreaT = t;
     if (!collectSeries) return;
     const s: Snapshot = {
       t,
@@ -326,6 +347,8 @@ export function runSimulation(
       const svc = Math.max(0.5, lognormal(rng, p.gateServiceMeanMin, p.gateServiceSigma));
       gateBusyUntil[g] = t + svc;
       gateBusyMin += svc;
+      gateStarts++;
+      inService.add(truck);
       events.push(t + svc, "gateEnd", truck);
     }
   }
@@ -348,6 +371,8 @@ export function runSimulation(
       const svc = base / productivity;
       yardBusyUntil[c] = t + svc;
       yardBusyMin += svc;
+      yardStarts++;
+      inService.add(truck);
       events.push(t + svc, "yardEnd", truck);
     }
   }
@@ -360,6 +385,8 @@ export function runSimulation(
       const svc = Math.max(1, exponential(rng, p.berthLoadMeanMin));
       berthBusyUntil[b] = t + svc;
       berthBusyMin += svc;
+      berthStarts++;
+      inService.add(truck);
       events.push(t + svc, "berthEnd", truck);
     }
   }
@@ -409,16 +436,19 @@ export function runSimulation(
       }
       switch (ev.kind) {
         case "gateEnd":
+          inService.delete(ev.truck);
           yardQueue.push(ev.truck);
           tryStartYard(et);
           tryStartGate(et);
           break;
         case "yardEnd":
+          inService.delete(ev.truck);
           berthQueue.push(ev.truck);
           tryStartBerth(et);
           tryStartYard(et);
           break;
         case "berthEnd":
+          inService.delete(ev.truck);
           completedTrucks++;
           completedTeu += ev.truck.teu;
           systemSum += et - ev.truck.arrivalTime;
@@ -463,5 +493,43 @@ export function runSimulation(
     berthCraneHours: berthBusyMin / 60,
   };
 
-  return { params: p, kpis, series, waitSamplesMin };
+  // Truncated-sojourn total: completed trucks contribute their full
+  // sojourn; trucks still queued or in service contribute up to the
+  // horizon end. Together with the time-average L this makes Little's
+  // Law checkable on a terminating run (see vv.ts).
+  let truncatedSojournSum = systemSum;
+  for (const q of [apptQueue, walkQueue, yardQueue, berthQueue]) {
+    for (const tr of q) truncatedSojournSum += horizonEnd - tr.arrivalTime;
+  }
+  for (const tr of inService) truncatedSojournSum += horizonEnd - tr.arrivalTime;
+
+  return {
+    params: p,
+    kpis,
+    series,
+    waitSamplesMin,
+    verification: {
+      totalArrivals: trucks.length,
+      completed: completedTrucks,
+      inSystemEnd:
+        apptQueue.length +
+        walkQueue.length +
+        yardQueue.length +
+        berthQueue.length +
+        gateBusyUntil.filter((b) => b > horizonEnd).length +
+        yardBusyUntil.filter((b) => b > horizonEnd).length +
+        berthBusyUntil.filter((b) => b > horizonEnd).length,
+      gateStarts,
+      yardStarts,
+      berthStarts,
+      gateBusyMin,
+      yardBusyMin,
+      berthBusyMin,
+      meanInSystem:
+        horizonMin > 0 ? systemAreaMin / horizonMin : null,
+      gateOpenServerMin: gateCapacityMin,
+      meanSojournAllMin:
+        trucks.length > 0 ? truncatedSojournSum / trucks.length : 0,
+    },
+  };
 }

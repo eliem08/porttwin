@@ -146,6 +146,52 @@ export interface SimResult {
    * price demurrage/detention beyond a free-time threshold.
    */
   waitSamplesMin: number[];
+  /**
+   * Raw counters for verification & validation (V&V): conservation of
+   * flow, Little's Law, and utilization identities. Computed from the
+   * run's own bookkeeping, independent of KPI aggregation.
+   */
+  verification: VerificationCounters;
+}
+
+/**
+ * Bookkeeping counters used by the V&V module. All are exact counts or
+ * sums from the event loop — no estimation involved.
+ */
+export interface VerificationCounters {
+  /** Trucks generated (arrivals). */
+  totalArrivals: number;
+  /** Trucks that completed all three stages. */
+  completed: number;
+  /** Trucks still in the system (queue or service) at the horizon end. */
+  inSystemEnd: number;
+  /** Trucks that started gate service. */
+  gateStarts: number;
+  /** Trucks that started yard handling. */
+  yardStarts: number;
+  /** Trucks that started berth loading. */
+  berthStarts: number;
+  /** Sum of realized gate service times (minutes, across lanes). */
+  gateBusyMin: number;
+  /** Sum of realized yard handling times (minutes, across cranes). */
+  yardBusyMin: number;
+  /** Sum of realized berth loading times (minutes, across berths). */
+  berthBusyMin: number;
+  /**
+   * Time-average number of trucks in the whole system (queues + service),
+   * rectangle rule over the snapshot cadence. Always computed — the area
+   * accumulator runs even when series collection is disabled.
+   */
+  meanInSystem: number | null;
+  /**
+   * Mean sojourn (arrival → departure) over ALL arrivals, with trucks
+   * still in flight at the horizon counted up to the horizon end
+   * (truncated sojourn). Unlike avgSystemMin (completed trucks only),
+   * this is the W that Little's Law needs for a terminating run.
+   */
+  meanSojournAllMin: number;
+  /** Gate server-minutes available across all lanes over the horizon. */
+  gateOpenServerMin: number;
 }
 
 /** Options for `runSimulation`. */

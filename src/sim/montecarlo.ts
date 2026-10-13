@@ -4,8 +4,9 @@
  *
  * Seeds are derived deterministically from the scenario's base seed
  * (baseSeed + replication index), so the whole Monte Carlo run is
- * reproducible. Confidence intervals use the normal approximation
- * mean ± 1.96 · s / √n, which is standard for n ≥ 30 replications.
+ * reproducible. Confidence intervals use the Student-t distribution with
+ * df = n − 1 (Law & Kelton Ch. 9) — the 1.96 normal factor is only the
+ * df → ∞ limit and understates uncertainty for modest replication counts.
  *
  * Two entry points:
  *  - runMonteCarlo: synchronous, for tests and scripts.
@@ -14,6 +15,7 @@
  */
 
 import { runSimulation } from "./engine";
+import { confidenceInterval } from "./stats";
 import type { Kpis, SimParams } from "./types";
 
 export interface KpiSummary {
@@ -59,18 +61,12 @@ const KPI_KEYS: Array<keyof Kpis> = [
 
 function summarize(values: number[]): KpiSummary {
   const n = values.length;
-  const mean = values.reduce((s, v) => s + v, 0) / Math.max(1, n);
-  const variance =
-    n > 1
-      ? values.reduce((s, v) => s + (v - mean) * (v - mean), 0) / (n - 1)
-      : 0;
-  const std = Math.sqrt(variance);
-  const margin = n > 0 ? 1.96 * (std / Math.sqrt(n)) : 0;
+  const ci = confidenceInterval(values);
   return {
-    mean,
-    std,
-    ciLow: mean - margin,
-    ciHigh: mean + margin,
+    mean: ci.mean,
+    std: ci.std,
+    ciLow: ci.ciLow,
+    ciHigh: ci.ciHigh,
     min: Math.min(...values),
     max: Math.max(...values),
   };
