@@ -22,3 +22,5 @@ export * from "./audit";
 export * from "./auth";
 export * from "./http";
 export * from "./service";
+/* Phase D: versioned real-world validation-data schemas. */
+export * from "./datasets";
