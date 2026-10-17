@@ -79,6 +79,16 @@ export interface CalibrationResult {
   searchedParams: Array<keyof SimParams>;
   /** Identification warning — always included, always shown. */
   identificationWarning: string;
+  /**
+   * True when fewer observed KPIs were supplied than (numeric) parameters
+   * searched: the fit is underdetermined — infinitely many parameter
+   * combinations can reproduce those KPIs, so the "best fit" is one
+   * plausible story, not an estimate. Silent overfit guard: the UI must
+   * show `underdeterminationWarning` whenever this is true.
+   */
+  underdetermined: boolean;
+  /** Extra prominent warning when underdetermined; null otherwise. */
+  underdeterminationWarning: string | null;
 }
 
 export const IDENTIFICATION_WARNING =
@@ -227,6 +237,21 @@ export function calibrate(
   const refinedKpis = mcMeanKpis(bestParams, refineReps, baseSeed);
   const refined = lossFor(refinedKpis, targets);
 
+  // Underdetermination guard: fitting M parameters to N < M observed KPIs
+  // is overfit by construction — flag it explicitly rather than letting
+  // a low residual imply the parameters were "found".
+  const numericSearched = searchParams.filter(
+    (sp) => typeof base[sp.key] === "number"
+  ).length;
+  const underdetermined = targets.length < numericSearched;
+  const underdeterminationWarning = underdetermined
+    ? `Underdetermined fit: ${targets.length} observed KPI${targets.length === 1 ? "" : "s"} ` +
+      `but ${numericSearched} parameters searched. Infinitely many parameter sets can ` +
+      `reproduce these KPI${targets.length === 1 ? "" : "s"}, so the best-fit values are one ` +
+      `plausible story, not an estimate. Add more observed KPIs (or search fewer ` +
+      `parameters) before trusting the numbers.`
+    : null;
+
   return {
     targets,
     best: { params: bestParams, loss: refined.loss, fit: refined.fit },
@@ -235,5 +260,7 @@ export function calibrate(
     candidatesEvaluated: candidateList.length,
     searchedParams: searchParams.map((s) => s.key),
     identificationWarning: IDENTIFICATION_WARNING,
+    underdetermined,
+    underdeterminationWarning,
   };
 }

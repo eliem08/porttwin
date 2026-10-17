@@ -113,7 +113,7 @@ export interface Kpis {
   avgWaitMin: number;
   /** Maximum observed gate queue length. */
   maxQueue: number;
-  /** Fraction of gate open-hours during which all gates were busy. */
+  /** Mean fraction of gate open-server-minutes spent busy (average per-lane utilization, 0–1). */
   gateUtilization: number;
   yardUtilization: number;
   berthUtilization: number;

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Disruptions, SimParams } from "@/sim";
 import {
   deleteScenario,
   loadSavedScenarios,
   saveScenario,
+  validateSimParams,
+  validateDisruptions,
   type SavedScenario,
 } from "@/sim";
 
@@ -22,14 +24,11 @@ export default function SavedScenariosPanel({
   onLoad,
   disabled = false,
 }: SavedScenariosPanelProps) {
-  const [saved, setSaved] = useState<SavedScenario[]>([]);
+  // Load once, lazily, at mount — no synchronising effect needed.
+  const [saved, setSaved] = useState<SavedScenario[]>(() => loadSavedScenarios());
   const [name, setName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSaved(loadSavedScenarios());
-  }, []);
 
   const flash = (text: string) => {
     setMessage(text);
@@ -49,10 +48,19 @@ export default function SavedScenariosPanel({
   };
 
   const handleLoad = (entry: SavedScenario) => {
-    onLoad(
-      JSON.parse(JSON.stringify(entry.params)) as SimParams,
-      JSON.parse(JSON.stringify(entry.disruptions)) as Disruptions
+    // Defense in depth: re-validate at the load-to-engine boundary, in
+    // case the in-memory entry was tampered with after loading.
+    const params = validateSimParams(
+      JSON.parse(JSON.stringify(entry.params))
     );
+    const disruptions = validateDisruptions(
+      JSON.parse(JSON.stringify(entry.disruptions))
+    );
+    if (!params || !disruptions) {
+      setError(`Could not load “${entry.name}”: stored data is incompatible`);
+      return;
+    }
+    onLoad(params, disruptions);
     flash(`Loaded “${entry.name}”`);
   };
 

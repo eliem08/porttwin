@@ -34,15 +34,6 @@ function CountUp({
     const node = ref.current;
     if (!node) return;
 
-    const prefersReduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (prefersReduced) {
-      setValue(to);
-      return;
-    }
-
     let frame = 0;
 
     const observer = new IntersectionObserver(
@@ -51,6 +42,12 @@ function CountUp({
         if (!entry || !entry.isIntersecting || started.current) return;
         started.current = true;
         observer.disconnect();
+
+        // Reduced motion: snap to the final value once visible, no animation.
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          setValue(to);
+          return;
+        }
 
         const start = performance.now();
         const step = (now: number) => {

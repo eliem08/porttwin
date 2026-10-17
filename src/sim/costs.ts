@@ -54,6 +54,12 @@ export interface CostLineItem {
   label: string;
   amount: number;
   detail: string;
+  /**
+   * Provenance of the line's inputs: what was MEASURED from the
+   * simulation vs what is an ILLUSTRATIVE ASSUMPTION (editable rates).
+   * Every dollar figure mixes the two — this field keeps them distinct.
+   */
+  provenance: { measured: string; assumed: string };
 }
 
 export interface CostBreakdown {
@@ -95,12 +101,20 @@ export function computeCosts(
       label: "Demurrage & detention",
       amount: money(demurrage),
       detail: `${demurrageHours.toFixed(0)} truck-h beyond ${rates.demurrageFreeHours}h free`,
+      provenance: {
+        measured: "per-truck gate waits (simulation)",
+        assumed: "free-allowance hours + $/truck-h rate",
+      },
     },
     {
       key: "waiting",
       label: "Truck waiting (driver + opportunity)",
       amount: money(waiting),
       detail: `${kpis.totalWaitHours.toFixed(0)} truck-h waiting`,
+      provenance: {
+        measured: "total gate-wait truck-hours (simulation)",
+        assumed: "$/truck-h driver + opportunity rate",
+      },
     },
     {
       key: "fuel",
@@ -109,18 +123,30 @@ export function computeCosts(
       detail: `${(
         kpis.totalWaitHours * rates.fuelLitersPerIdleHour
       ).toFixed(0)} L diesel @ $${rates.fuelPricePerLiter.toFixed(2)}/L`,
+      provenance: {
+        measured: "total gate-wait truck-hours (simulation)",
+        assumed: "litres per idle hour + diesel price",
+      },
     },
     {
       key: "crane",
       label: "Crane-hours",
       amount: money(crane),
       detail: `${(kpis.yardCraneHours + kpis.berthCraneHours).toFixed(0)} busy crane-h`,
+      provenance: {
+        measured: "busy yard + berth crane-hours (simulation)",
+        assumed: "$/crane-h rate",
+      },
     },
     {
       key: "carbon",
       label: "Carbon (policy placeholder)",
       amount: money(carbon),
       detail: `${kpis.co2Tonnes.toFixed(1)} t CO₂ @ $${rates.carbonPricePerTonne}/t`,
+      provenance: {
+        measured: "idle truck-hours (simulation)",
+        assumed: "kg CO₂ per idle hour + carbon price",
+      },
     },
   ];
 

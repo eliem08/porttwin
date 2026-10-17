@@ -104,16 +104,35 @@ export default function MonteCarloPanel({
   const runId = useRef(0);
 
   // Keep the base-seed input in sync when the scenario seed changes.
-  useEffect(() => {
+  // Render-time adjustment (the React-sanctioned alternative to
+  // setState-inside-effect: https://react.dev/learn/you-might-not-need-an-effect).
+  const [seedSyncedTo, setSeedSyncedTo] = useState(params.seed);
+  if (seedSyncedTo !== params.seed) {
+    setSeedSyncedTo(params.seed);
     setBaseSeed(params.seed);
-  }, [params.seed]);
+  }
 
   // A changed scenario invalidates the previous Monte Carlo run.
-  useEffect(() => {
+  // `resultScenario` records which scenario the result belongs to; a
+  // render-time adjustment clears it when the scenario changes.
+  const [resultScenario, setResultScenario] = useState(params);
+  if (resultScenario !== params) {
+    setResultScenario(params);
     setResult(null);
-    onResult?.(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
+  }
+  const shownResult = resultScenario === params ? result : null;
+
+  // Keep the parent's copy (used by export) in sync — in an effect so we
+  // never update a parent component during this component's render.
+  const onResultRef = useRef(onResult);
+  const notifiedScenario = useRef<SimParams | null>(null);
+  useEffect(() => {
+    onResultRef.current = onResult;
+    if (notifiedScenario.current !== resultScenario) {
+      notifiedScenario.current = resultScenario;
+      if (shownResult === null) onResultRef.current?.(null);
+    }
+  });
 
   const run = async () => {
     const id = ++runId.current;
@@ -147,8 +166,8 @@ export default function MonteCarloPanel({
   };
 
   const stale =
-    result !== null &&
-    (result.baseSeed !== baseSeed || result.replications !== replications);
+    shownResult !== null &&
+    (shownResult.baseSeed !== baseSeed || shownResult.replications !== replications);
 
   return (
     <div className="panel flex flex-col gap-4 p-4">
@@ -201,7 +220,7 @@ export default function MonteCarloPanel({
           disabled={disabled || running}
           onClick={run}
         >
-          {running ? "Running…" : result ? "Re-run Monte Carlo" : "Run Monte Carlo"}
+          {running ? "Running…" : shownResult ? "Re-run Monte Carlo" : "Run Monte Carlo"}
         </button>
       </div>
 
@@ -232,7 +251,7 @@ export default function MonteCarloPanel({
         </p>
       )}
 
-      {result && (
+      {shownResult && (
         <div className="flex flex-col gap-4">
           {stale && (
             <p className="rounded-lg border border-signal/40 bg-signal/10 px-3 py-2 text-xs text-signal">
@@ -252,7 +271,7 @@ export default function MonteCarloPanel({
               </thead>
               <tbody>
                 {DISPLAY_ROWS.map((row) => {
-                  const s = result.summaries[row.key];
+                  const s = shownResult.summaries[row.key];
                   return (
                     <tr key={row.key} className="border-b border-white/5">
                       <td className="py-2 pr-2 font-medium text-white">
@@ -291,7 +310,7 @@ export default function MonteCarloPanel({
                   {row.label}
                 </p>
                 <CiBar
-                  summary={result.summaries[row.key]}
+                  summary={shownResult.summaries[row.key]}
                   unit={row.key === "throughputTeuPerDay" ? "TEU" : ""}
                 />
               </div>
@@ -299,8 +318,8 @@ export default function MonteCarloPanel({
           </div>
 
           <p className="border-t border-white/10 pt-3 text-[11px] leading-snug text-mist">
-            {result.replications} replications, seeds {result.baseSeed}–
-            {result.baseSeed + result.replications - 1}. CI = mean ± t(0.975, n−1)·s/√n
+            {shownResult.replications} replications, seeds {shownResult.baseSeed}–
+            {shownResult.baseSeed + shownResult.replications - 1}. CI = mean ± t(0.975, n−1)·s/√n
             (Student-t, Law &amp; Kelton Ch. 9). Wider bands mean the scenario is more
             luck-dependent.
           </p>
