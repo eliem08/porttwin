@@ -10,6 +10,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci
+      # Dependency vulnerability gate: fails the build on HIGH or CRITICAL
+      # advisories. Moderate/low findings do not block CI; they are
+      # reviewed manually and picked up by the weekly Dependabot updates.
+      - run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm run lint --if-present
       - run: npm test
