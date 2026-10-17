@@ -118,6 +118,8 @@ const WaitDistributionDaySchema = z
     p99Min: nonNegativeFinite().optional(),
     /** Longest observed wait. Unit: minutes. */
     maxMin: nonNegativeFinite().optional(),
+    /** Where this row came from, e.g. "TOS export", "gate tally". */
+    source: z.string().max(200).optional(),
   })
   .strict()
   .superRefine((w, ctx) => {
