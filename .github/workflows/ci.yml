@@ -1,0 +1,31 @@
+name: CI
+on:
+  push: { branches: ['harden/**', 'main'] }
+  pull_request: {}
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: Install (clean, lockfile-exact)
+        run: npm ci
+      # Security gate (BLOCKING): any HIGH or CRITICAL advisory in the full
+      # dependency tree (prod + dev tooling) fails CI. There are currently no
+      # exceptions. If an unfixable advisory ever has to be tolerated, scope it
+      # explicitly (advisory ID + reason + expiry) in docs/LIMITATIONS.md and
+      # gate it here by ID; do not turn this step into a warning.
+      - name: Security audit (fails on high/critical)
+        run: npm audit --audit-level=high
+      - name: Audit report (all severities, informational)
+        if: always()
+        run: npm audit || true
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: Production build
+        run: npm run build

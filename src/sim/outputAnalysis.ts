@@ -209,6 +209,16 @@ export interface PairedComparisonResult {
  * its random stream with replication i of B. The comparison is on the
  * per-replication differences, with a paired-t CI. `pick` selects the
  * KPI being compared (default: average wait).
+ *
+ * IMPLEMENTATION LIMITATION (stream discipline): CRN here is at seed
+ * granularity. Each replication restarts one SHARED mulberry32 stream
+ * that arrival generation and all service-time draws consume in a single
+ * sequence — arrivals and services are NOT on separate substreams. Any
+ * structural change that alters how many draws the stream consumes (e.g.
+ * a different truck count, or TAS on/off changing the arrival profile)
+ * desynchronizes the two streams from that point on, and the variance
+ * reduction degrades. The returned `correlation` shows whether CRN
+ * actually helped for this pair — trust the number, not the label.
  */
 export function pairedComparison(
   paramsA: SimParams,

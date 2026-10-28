@@ -50,7 +50,12 @@ interface SimEvent {
   truck: Truck;
 }
 
-class EventQueue {
+/**
+ * Binary min-heap event queue ordered by (time, sequence).
+ * Exported so audit tests can verify the tie-breaking guarantee directly;
+ * the engine always pushes through `push`, which assigns insertion order.
+ */
+export class EventQueue {
   private heap: SimEvent[] = [];
   private seqCounter = 0;
 
@@ -474,6 +479,10 @@ export function runSimulation(
     throughputTrucksPerDay: completedTrucks * dayFactor,
     avgWaitMin: waitedCount > 0 ? waitSum / waitedCount : 0,
     maxQueue,
+    // Capped at 1: gateBusyMin counts full realized service times, so a
+    // truck starting just before closing contributes service minutes that
+    // spill past the open window, and the raw ratio can marginally exceed
+    // 1 (see B3 audit test). Utilization of the open window itself cannot.
     gateUtilization: gateCapacityMin > 0 ? Math.min(1, gateBusyMin / gateCapacityMin) : 0,
     yardUtilization:
       p.yardCranes > 0

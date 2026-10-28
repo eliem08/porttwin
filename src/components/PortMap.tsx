@@ -167,9 +167,8 @@ export default function PortMap({ series }: PortMapProps) {
     return () => window.clearInterval(id);
   }, [playing, speed, count]);
 
-  useEffect(() => {
-    setCursor((c) => (count === 0 ? 0 : Math.min(c, count - 1)));
-  }, [count]);
+  // `index` (below) already clamps `cursor` during render, so no
+  // synchronising effect is needed when the series shrinks.
 
   useEffect(() => {
     const wrapped = cursor === 0 && prevCursor.current !== 0;

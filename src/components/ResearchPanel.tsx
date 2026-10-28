@@ -776,6 +776,11 @@ function CalibrationTab({ params, onApplyParams }: { params: SimParams; onApplyP
           <p className="rounded-lg border border-coral/40 bg-coral/10 px-3 py-2 text-[11px] leading-relaxed text-coral">
             ⚠ {IDENTIFICATION_WARNING}
           </p>
+          {cal.underdetermined && cal.underdeterminationWarning && (
+            <p className="rounded-lg border border-coral/60 bg-coral/15 px-3 py-2 text-[11px] font-semibold leading-relaxed text-coral">
+              ⚠ {cal.underdeterminationWarning}
+            </p>
+          )}
         </div>
       )}
     </div>

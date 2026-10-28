@@ -146,7 +146,10 @@ export default function CostPanel({
               return (
                 <tr key={item.key} className="border-b border-white/5">
                   <td className="py-2 pr-2">
-                    <span className="block font-medium text-white">
+                    <span
+                      className="block font-medium text-white"
+                      title={`Measured: ${item.provenance.measured}. Assumed: ${item.provenance.assumed}.`}
+                    >
                       {item.label}
                     </span>
                     <span className="block text-[11px] text-mist">
@@ -222,7 +225,10 @@ export default function CostPanel({
 
       <p className="border-t border-white/10 pt-3 text-[11px] leading-snug text-mist">
         Demurrage is a truck-hour proxy (this twin is landside; vessels are
-        not simulated). See README for what the cost model covers.
+        not simulated). Quantities are <span className="text-white">measured from the simulation</span>;
+        every rate is an <span className="text-white">illustrative assumption</span> —
+        hover a line item for the split, and edit the rates before quoting
+        numbers. See README for what the cost model covers.
       </p>
     </div>
   );

@@ -27,6 +27,8 @@ export interface KpiSummary {
   ciLow: number;
   /** Upper bound of the 95% confidence interval for the mean. */
   ciHigh: number;
+  /** Half-width of the 95% CI (t(0.975, n−1)·s/√n). */
+  halfWidth: number;
   /** Min / max observed across replications. */
   min: number;
   max: number;
@@ -67,6 +69,7 @@ function summarize(values: number[]): KpiSummary {
     std: ci.std,
     ciLow: ci.ciLow,
     ciHigh: ci.ciHigh,
+    halfWidth: ci.halfWidth,
     min: Math.min(...values),
     max: Math.max(...values),
   };

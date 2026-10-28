@@ -102,6 +102,9 @@ import {
   erlangGateCheck,                       // M/M/c analytical cross-check
   runFactorial, ofatSensitivity,         // DOE + OFAT tornado + interaction heatmap
   confidenceInterval, tQuantile,         // Student-t statistics
+  // --- Phase D: validation-data schemas + held-out evaluation ---
+  validateValidationDataset, SCHEMA_VERSION, // real-world data contracts (v1.0.0)
+  evaluateParams,                        // held-out evaluation (fresh seeds)
 } from "./src/sim";
 
 // Monte Carlo: 30 replications, seeds 42..71
@@ -200,6 +203,27 @@ The Research panel applies textbook simulation methodology. Every method states 
 - Gross, D., Shortle, J. F., Thompson, J. M., & Harris, C. M. (2018). *Fundamentals of Queueing Theory*, 5th ed. Wiley.
 - Montgomery, D. C. (2017). *Design and Analysis of Experiments*, 9th ed. Wiley.
 - Welch, P. D. (1983). The statistical analysis of simulation results. In S. S. Lavenberg (Ed.), *The Computer Performance Modeling Handbook*. Academic Press.
+
+## Validation (Phase D) — what is proven, and what is not
+
+> **PortTwin is NOT a validated digital twin.** The engine is *verified*
+> (the code is right); real-world accuracy is a separate claim that
+> requires measured operational data, which does not exist yet.
+
+**Software correctness — proven, with numbers (172 tests green):**
+
+- Conservation of flow: residual **exactly 0** across 40 randomized disruption combinations × seeds.
+- Event queue: (time, sequence) ordering under heavy simultaneous-arrival load; 50-seed reproducibility sweep bit-identical.
+- KPI definitions consistent across code paths (waits, throughput, utilization, CO₂, system time).
+- Statistics machinery: Student-t CIs cover a **known** ground-truth mean at **94.3%** (nominal 95%; 600 reps × n=12 on Normal(100,15)) — this tests the math, not the model.
+- CRN paired comparisons: 3→4 gates, correlation 0.69, paired CI **1.7× narrower**; 8→10 yard cranes, correlation 0.78, **2.1× narrower**.
+- Performance: 200 replications × 24 h in 0.75 s; 200 × 7 d in 4.4 s — linear scaling, no superlinear degradation (see `docs/PERFORMANCE.md`).
+
+**Real-world accuracy — NOT claimed:**
+
+- No measured operational data exists. The validation-data schemas are versioned and waiting (`src/sim/datasets.ts`, `SCHEMA_VERSION = "1.0.0"`); the shipped fixtures are **synthetic** (engine-generated from known parameters) and prove machinery only: the calibration → held-out workflow runs end to end (calibrate on set A, evaluate on unseen set B), but a low loss there says nothing about the real port.
+- Acceptance criteria for a supervised pilot: 10 of 14 MET, 4 BLOCKED-ON-REAL-DATA — see `docs/ACCEPTANCE.md` for the per-criterion evidence and the data ask (terminal operator / ANP).
+- Known limitations with resolving evidence: `docs/LIMITATIONS.md`.
 
 ## Honest limitations
 

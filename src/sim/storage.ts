@@ -10,6 +10,10 @@
 
 import type { Disruptions } from "./disruptions";
 import type { SimParams } from "./types";
+import {
+  SCENARIO_SCHEMA_VERSION,
+  validateScenarioEntry,
+} from "./validate";
 
 /** Minimal storage surface (subset of the DOM Storage interface). */
 export interface StorageLike {
@@ -22,6 +26,8 @@ export interface StorageLike {
 export interface SavedScenario {
   name: string;
   savedAt: string; // ISO timestamp
+  /** Schema version of the stored params (see validate.ts). */
+  version: number;
   params: SimParams;
   disruptions: Disruptions;
 }
@@ -61,27 +67,12 @@ export function defaultStorage(): StorageLike {
   return new MemoryStorage();
 }
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function looksLikeScenario(v: unknown): v is SavedScenario {
-  if (!isRecord(v)) return false;
-  if (typeof v.name !== "string" || v.name.trim().length === 0) return false;
-  if (typeof v.savedAt !== "string") return false;
-  if (!isRecord(v.params)) return false;
-  if (!isRecord(v.disruptions)) return false;
-  // Spot-check a few required numeric params.
-  const p = v.params as Record<string, unknown>;
-  return (
-    typeof p.seed === "number" &&
-    typeof p.trucksPerDay === "number" &&
-    typeof p.numGates === "number" &&
-    typeof p.simHours === "number"
-  );
-}
-
-/** Load all saved scenarios (newest first). Never throws. */
+/** Load all saved scenarios (newest first). Never throws.
+ *
+ * Every entry is fully validated (types, ranges, schema version) before
+ * it is returned: a corrupt, hand-edited, or stale localStorage payload
+ * can never reach the engine. Invalid entries are silently dropped.
+ */
 export function loadSavedScenarios(
   storage: StorageLike = defaultStorage()
 ): SavedScenario[] {
@@ -90,7 +81,12 @@ export function loadSavedScenarios(
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(looksLikeScenario);
+    const out: SavedScenario[] = [];
+    for (const entry of parsed) {
+      const valid = validateScenarioEntry(entry);
+      if (valid) out.push(valid);
+    }
+    return out;
   } catch {
     return [];
   }
@@ -121,6 +117,7 @@ export function saveScenario(
   const entry: SavedScenario = {
     name: cleanName,
     savedAt: new Date().toISOString(),
+    version: SCENARIO_SCHEMA_VERSION,
     params: JSON.parse(JSON.stringify(params)) as SimParams,
     disruptions: JSON.parse(JSON.stringify(disruptions)) as Disruptions,
   };
