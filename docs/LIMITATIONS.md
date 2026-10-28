@@ -113,3 +113,20 @@ measurements of the real port.
 
 **Resolving evidence:** same as limitation 1 — fitted parameters
 replace the presets only after real calibration.
+
+
+## Security, dependencies and production readiness (verified 2026-10-28)
+
+**Dependency audit.** `npm audit` reports 0 vulnerabilities (all severities) on the lockfile at the commit that introduced this section. CI runs `npm audit --audit-level=high` as a **blocking** step with **no exceptions**; a second step prints the full report. If an unfixable advisory ever has to be tolerated, it must be listed here with advisory ID, affected environment, mitigation, expiry and follow-up, and gated by ID in CI, not by turning the audit into a warning.
+
+**Not production-ready.** A green CI run is not evidence of production readiness. Missing before any real deployment: real-data validation, a durable shared store, a real identity provider with verified credentials, operational monitoring, backup/recovery, and an authorized staging validation. Nothing in this repository has been connected to a real port, TOS, gate controller or production service.
+
+**Feature status.**
+
+| Feature | Status |
+|---|---|
+| Simulation, Monte Carlo summaries, sensitivity, held-out evaluation, contract validation | Implemented and tested (172 tests) on **synthetic, uncalibrated** parameters |
+| Approvals / audit / idempotency | Library-level, **in-memory** (`approvals` Map): lost on restart, not shared |
+| Authentication | `DevMockAuthProvider` is a library-level mock with no HTTP surface. `assertNotDev(provider)` MUST be called by any API layer before delegating to `approveForDecision` (it is intentionally not called inside it). A real provider is a placeholder. |
+| Cost figures | Illustrative assumptions only |
+| Tooling note | vitest 5 requires Node >= 22.12, so CI for this repository runs on Node 22. |
